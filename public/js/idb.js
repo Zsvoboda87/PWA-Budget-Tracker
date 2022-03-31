@@ -10,10 +10,9 @@ request.onupgradeneeded = function (event) {
 // upon a successful
 request.onsuccess = function (event) {
   db = event.target.result;
-  
+
   if (navigator.onLine) {
-    // we haven't created this yet, but we will soon, so let's comment it out for now
-    // uploadPizza();
+    uploadBudgetItems();
   }
 };
 
@@ -22,9 +21,49 @@ request.onerror = function (event) {
   console.log(event.target.errorCode);
 };
 
+
 function saveRecord(record) {
   const transaction = db.transaction(["new_budget_item"], "readwrite");
   const budgetObjectStore = transaction.objectStore("new_budget_item");
 
   budgetObjectStore.add(record);
 }
+
+function uploadBudgetItems() {
+  
+  const transaction = db.transaction(["new_budget_item"], "readwrite");
+  const budgetObjectStore = transaction.objectStore("new_budget_item");
+  const getAll = budgetObjectStore.getAll();
+
+  getAll.onsuccess = function () {
+    // if there was data in indexedDb's store, let's send it to the api server
+    if (getAll.result.length > 0) {
+      fetch("/api/transaction", {
+        method: "POST",
+        body: JSON.stringify(getAll.result),
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((serverResponse) => {
+          if (serverResponse.message) {
+            throw new Error(serverResponse);
+          }
+          
+          const transaction = db.transaction(["new_budget_item"], "readwrite");
+          const budgetObjectStore = transaction.objectStore("new_budget_item");
+          budgetObjectStore.clear();
+
+          alert("Saved budget items has been submitted!");
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+  };
+}
+
+
+window.addEventListener("online", uploadBudgetItems);
